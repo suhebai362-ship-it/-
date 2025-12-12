@@ -2,6 +2,35 @@
 #与UI自动化相同 为了让代码更加简介 更贴近业务语言 我把request方法做了封装
 #封装后 只需要从api_core.usage导入要使用的方式 即可更简洁的进行操作 同时，封装后 默认在使用后 打印出相关信息
 ----------------------------------------------------------------------------------------------------
+框架简单构成 👇
+----------------------------------------------------------------------------------------------------
+kinklink_api/
+├─ api_core/                   框架核心能力
+│  ├─ __init__.py
+│  ├─ settings.py              环境/配置（base_url、env、账号等）
+│  ├─ new_session.py.py        requests Session 封装
+│  ├─ headers.py               eaders.py：公共头、签名入口
+│  ├─ crypto.py                加解密/MD5/AES 等
+│  └─ allure_utils.py          Allure 附件、步骤封装（可选）
+│
+├─ tests/                      所有测试用例统一收口
+│  ├─ conftest.py              
+│  ├─ get/                     
+│  ├─ post/                   
+│  ├─ pg/                      
+│  └─ taskpls/                 
+│
+├─ scripts/                    
+│  └─ run_pytest.py            
+│
+├─ pytest.ini
+├─ requirements.txt            
+├─ .gitignore
+├─ README.md                   一些说明
+├─ confest                     写了一些全局性配置  例如设置全局变量
+----------------------------------------------------------------------------------------------------
+具体使用示例 👇
+----------------------------------------------------------------------------------------------------
 from api_core.usage import get_method, post_form, post_json
 def test_get_matchCD():
     get_method("/kink-customer/user/getMatchCD")
@@ -11,7 +40,7 @@ if __name__ == '__main__':
     test_get_matchCD()
     test_clear()
 ---------------------------------------------------------------------------------------------------
-使用方法示例 👇
+不同请求方式使用方法示例 👇
 ---------------------------------------------------------------------------------------------------
 post请求方式
 """
@@ -32,3 +61,38 @@ def test_photo_v4(uid):
     get_method("/kink-customer/v4/user/avatar",userId = uid)
 //可自动打印返回参数  不用特意打印
 ---------------------------------------------------------------------------------------------------
+参数化示例   在这个框架中我只使用了parametrize方式  yaml csv方式 我还是觉得在Jmeter这类工具里使用更加便捷 👇
+---------------------------------------------------------------------------------------------------
+import pytest
+@pytest.mark.parametrize(("name", "姓氏"), [
+    ("苏", "呼"),
+    ("宁", "蓝"),
+])
+def test_get_method(name, 姓氏):
+    print(name, 姓氏)
+
+if __name__ == "__main__":
+    pytest.main()
+-----------------------------------------------------------------------------------------------------
+前置后置操作示例  👇
+-----------------------------------------------------------------------------------------------------
+from test_config.usage import post_json
+import pytest
+
+@pytest.fixture()
+def my_fixture():
+    print("此项为 fixture 演示代码")
+    yield {"ready": True}
+    print("此项为后置操作 fixture")
+
+def test_fixture_02(my_fixture):  #在这里直接传上面的函数名就行
+    params = {"data": "dNSL5CBf9anb9wBaFDKAF8A9/T8CbZflJy2VZFlqhVo"}
+    s = post_json("/kink-customer/v5/decrypt.e", params=params)   
+
+    print(s.status_code, s.url)
+    print("Body:", s.text)
+if __name__ == '__main__':
+    pytest.main([__file__])
+-------------------------------------------------------------------------------------------------------
+
+
