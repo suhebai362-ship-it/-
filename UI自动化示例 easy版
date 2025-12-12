@@ -1,0 +1,179 @@
+#因为我自己封装了一个xpath方法 在使用定位时 只需传xpath路径 默认会有一次点击 如需上传文件 或者文字 只需要在路径后面加上文字 或者路径即可
+#此类编辑方式会让定位操作更加简洁 让代码更贴近业务语言   
+#也做了个页面基类的写法  后续更新
+-----------------------------------------------------------------------------------------------------------------------------
+基础示例  👇
+-----------------------------------------------------------------------------------------------------------------------------
+#选日期
+xpath_mothod(driver, '//*[@id="__nuxt"]/div/div/div[1]/div/section[1]/div[2]')
+#选几天 一天 👇
+xpath_mothod(driver, '/html/body/div[5]/div/ul/li[2]')
+#创建任务
+xpath_mothod(driver, '//*[@id="__nuxt"]/div/div/div[1]/div/section[1]/button')
+#点确认
+xpath_mothod(driver, '/html/body/div[5]/div/div[2]/div/button[2]')
+#点击发送任务
+xpath_mothod(driver, '//*[@id="__nuxt"]/div/div/div[1]/div/div[3]/div/div[1]/div[2]/div[3]/div/button[1]')
+#点确认
+xpath_mothod(driver, '/html/body/div[5]/div/div/div/div[2]/div/div[2]/div[2]/button')
+#点击个人中心
+xpath_mothod(driver, '//*[@id="__nuxt"]/div/div/header/div/div[2]/a/span/img')
+#点击相册编辑按钮
+xpath_mothod(driver, '//*[@id="__nuxt"]/div/div/div[1]/div/div[2]/div[1]/button')
+------------------------------------------------------------------------------------------------------------------------------
+这个是核心定位方式 效率很高 我自己和AI调的  命中率很高  核心定位方式👇
+------------------------------------------------------------------------------------------------------------------------------
+import os
+import time
+
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import (
+    NoSuchElementException,
+    TimeoutException,
+    ElementClickInterceptedException,
+    ElementNotInteractableException,
+    StaleElementReferenceException,
+)
+def xpath_mothod(
+    driver,
+    xpath: str,
+    text: str | None = None,
+    timeout: int = 10,
+    retries: int = 3,
+    clear_before_input: bool = True,
+    desc: str | None = None,
+    screenshot_dir: str = "screenshots",
+):
+    """
+    通用 XPATH 操作函数：支持点击 & 输入，带多种保障机制。
+
+    使用方式：
+      - 只传 xpath                 → 当作点击
+      - 传 xpath + text            → 当作输入
+
+    :param driver: WebDriver 实例
+    :param xpath: XPATH 路径
+    :param text: 需要输入的文本；为 None 时执行点击
+    :param timeout: 单次显式等待超时时间（秒）
+    :param retries: 最大重试次数
+    :param clear_before_input: 输入前是否先 clear()
+    :param desc: 元素描述（日志 / 报告中显示的名字）
+    :param screenshot_dir: 失败时截图保存目录
+    """
+    action = "输入" if text is not None else "点击"
+    target = desc or xpath
+    last_exception = None
+
+    for attempt in range(1, retries + 1):
+        try:
+            print(f"[INFO] 第 {attempt} 次尝试 {action} 元素: {target}")
+
+            wait = WebDriverWait(driver, timeout)
+
+            # 1）等待元素在 DOM 中出现
+            element = wait.until(
+                EC.presence_of_element_located((By.XPATH, xpath))
+            )
+
+            # 2）等待元素可见
+            element = wait.until(
+                EC.visibility_of_element_located((By.XPATH, xpath))
+            )
+
+            # 3）如果是点击，再额外等待元素可点击
+            if text is None:
+                element = wait.until(
+                    EC.element_to_be_clickable((By.XPATH, xpath))
+                )
+
+            # 4）滚动到元素位置，避免在视口外
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                element,
+            )
+
+            # 5）高亮元素，方便调试
+            driver.execute_script(
+                "arguments[0].style.border='2px solid red';", element
+            )
+
+            # 6）执行具体操作
+            if text is None:
+                # 点击
+                element.click()
+                print(f"[OK] 成功点击元素: {target}")
+            else:
+                # 输入
+                if clear_before_input:
+                    element.clear()
+                element.send_keys(text)
+                print(f"[OK] 成功向元素输入文本: {target} -> {text}")
+
+            return  # 成功后直接返回
+
+        except (
+            NoSuchElementException,
+            TimeoutException,
+            ElementClickInterceptedException,
+            ElementNotInteractableException,
+            StaleElementReferenceException,
+        ) as e:
+            last_exception = e
+            print(
+                f"[WARN] 第 {attempt} 次 {action} 失败: {target}，原因: {type(e).__name__}，准备重试..."
+            )
+            time.sleep(1)
+
+    # ========== 多次重试仍失败，执行兜底逻辑 ==========
+    print(f"[ERROR] 多次尝试后仍无法 {action} 元素: {target}，执行兜底逻辑...")
+
+    # 如果是点击操作，尝试使用 JS 兜底点击一次
+    if text is None:
+        try:
+            wait = WebDriverWait(driver, timeout)
+            element = wait.until(
+                EC.presence_of_element_located((By.XPATH, xpath))
+            )
+            driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+                element,
+            )
+            driver.execute_script("arguments[0].click();", element)
+            print(f"[OK] 通过 JS 兜底点击成功: {target}")
+            return
+        except Exception as e:
+            last_exception = e
+            print(f"[ERROR] JS 兜底点击仍失败: {target}，原因: {type(e).__name__}")
+
+    # ========== 兜底仍失败，统一截图 + 抛异常 ==========
+    os.makedirs(screenshot_dir, exist_ok=True)
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    screenshot_path = os.path.join(
+        screenshot_dir, f"xpath_fail_{timestamp}.png"
+    )
+
+    try:
+        driver.save_screenshot(screenshot_path)
+        print(f"[ERROR] 已保存失败截图: {screenshot_path}")
+    except Exception as e:
+        print(f"[ERROR] 截图失败: {e}")
+        screenshot_path = None  # 避免后面引用报错
+
+    # 如果装了 allure，把截图也挂到报告里
+    if allure and screenshot_path and os.path.exists(screenshot_path):
+        try:
+            allure.attach.file(
+                screenshot_path,
+                name=f"元素失败_{target}",
+                attachment_type=allure.attachment_type.PNG,
+            )
+        except Exception as e:
+            print(f"[ALLURE] 附加截图失败: {e}")
+
+    # 抛出更友好的异常
+    raise RuntimeError(
+        f"多次尝试后仍无法操作元素: {target}，已截图保存到 {screenshot_path}"
+    ) from last_exception
+
