@@ -6,7 +6,7 @@
 -----------------------------------------------------------------------------------------------------------------------------
 #选日期
 xpath_mothod(driver, '//*[@id="__nuxt"]/div/div/div[1]/div/section[1]/div[2]')
-#选几天 一天 👇
+#选几天 一天 
 xpath_mothod(driver, '/html/body/div[5]/div/ul/li[2]')
 #创建任务
 xpath_mothod(driver, '//*[@id="__nuxt"]/div/div/div[1]/div/section[1]/button')
